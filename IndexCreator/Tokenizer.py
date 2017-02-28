@@ -21,8 +21,12 @@ class Tokenizer:
                 self.stop_words.append(line.strip())
 
     def get_title_tokens(self):
-        title_text = str(self.soup.title.string).strip()
-        title_text = remove_non_alphanumeric_characters(title_text)
+        title_text = self.soup.title
+
+        if title_text is None:
+            return
+
+        title_text = remove_non_alphanumeric_characters(title_text.string.strip())
 
         self.title_tokens = {}
 
@@ -75,23 +79,19 @@ class Tokenizer:
                 if foldername == '0':
                     for filename in os.listdir(self.path_to_resources + foldername):
                         if filename == '9':
-                            self.read_file_contents(self.path_to_resources + foldername + "/" + filename)
-                            self.soup = BeautifulSoup(self.current_page_contents, 'html.parser')
+                            self.parse_tokens(self.path_to_resources + foldername + "/" + filename)
 
-                            self.get_title_tokens()
-                            self.get_header_tokens()
-                            self.get_body_tokens()
+    def parse_tokens(self, filepath):
+        self.read_file_contents(filepath)
+        self.soup = BeautifulSoup(self.current_page_contents, 'html.parser')
+
+        self.get_title_tokens()
+        self.get_header_tokens()
+        self.get_body_tokens()
 
     def read_file_contents(self, filepath):
         with open(filepath, 'r') as fileobject:
             self.current_page_contents = str.lower(fileobject.read())
-
-            # todo: clean unclosed tags using the prettify function (see file 0-1)
-            # todo: rewrite those files to a new resources directory?
-            # todo: what to do about file 0-0 (the one with only numbers?
-            # todo: make another class just to parse text (INCLUDES header tags, list tags, paragraph tags, etc)
-            # todo: remove apostrophe s
-            # todo: stemming? remove contractions
 
     def remove_header_token_duplicates(self, dictionary):
         temp_dict = dictionary
@@ -131,5 +131,13 @@ def visible(element):
 if __name__ == '__main__':
     t = Tokenizer()
     t.load_stop_words('stopwords.txt')
-    t.get_files()
+    t.parse_tokens('test.txt')
+    # t.get_files()
     print(t.body_tokens.keys())
+
+    # todo: clean unclosed tags using the prettify function (see file 0-1)
+    # todo: rewrite those files to a new resources directory?
+    # todo: what to do about file 0-0 (the one with only numbers?
+    # todo: make another class just to parse text (INCLUDES header tags, list tags, paragraph tags, etc)
+    # todo: remove apostrophe s
+    # todo: stemming? remove contractions
