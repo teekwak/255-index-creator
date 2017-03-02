@@ -1,4 +1,5 @@
 import pymysql
+from pymysql import MySQLError
 
 
 class MYSQLConnector:
@@ -7,45 +8,90 @@ class MYSQLConnector:
         self.username = 'root'
         self.password = 'password'
         self.database = 'search'
+        self.charset = 'utf8'
 
+    def create_words_table(self):
+        db = pymysql.connect(host=self.hostname, user=self.username, passwd=self.password, db=self.database, charset=self.charset)
+        cursor = db.cursor()
 
-    def insert(self):
+        sql = """
+            CREATE TABLE IF NOT EXISTS Words(
+            WORD TEXT,
+            PAGES MEDIUMTEXT
+            ) CHARACTER SET utf8
+        """
+
+        cursor.execute(sql)
+        db.close()
+
+    def upload_word(self, word_object):
+        db = pymysql.connect(host=self.hostname, user=self.username, passwd=self.password, db=self.database, charset=self.charset)
+        cursor = db.cursor()
+
+        values = {
+            'word': str(word_object.word),
+            'pages': str(word_object.pages)
+        }
+
+        sql = """
+            INSERT INTO Words (WORD, PAGES)
+            VALUES ("{word}", "{pages}")
+        """.format(**values)
+
+        try:
+            cursor.execute(sql)
+            db.commit()
+        except MySQLError as e:
+            print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+            db.rollback()
+
+        db.close()
+
         pass
 
-    def upload_page(self):
-        pass
+    def create_pages_table(self):
+        db = pymysql.connect(host=self.hostname, user=self.username, passwd=self.password, db=self.database, charset=self.charset)
+        cursor = db.cursor()
+
+        sql = """
+            CREATE TABLE IF NOT EXISTS Pages(
+            ID VARCHAR(255),
+            URL TEXT,
+            WORD_COUNT INT,
+            WORDS MEDIUMTEXT
+            ) CHARACTER SET utf8
+        """
+
+        cursor.execute(sql)
+        db.close()
+
+    def upload_page(self, page):
+        db = pymysql.connect(host=self.hostname, user=self.username, passwd=self.password, db=self.database, charset=self.charset)
+        cursor = db.cursor()
+
+        dict = {
+            'id': str(page.id),
+            'url': str(page.url),
+            'word_count': str(page.word_count),
+            'words': str(page.words)
+        }
+
+        sql = """
+            INSERT INTO Pages (ID, URL, WORD_COUNT, WORDS) VALUES ("{id}", "{url}", "{word_count}", "{words}")
+        """.format(**dict)
+
+        try:
+            cursor.execute(sql)
+            db.commit()
+        except MySQLError as e:
+            print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+            db.rollback()
+
+        db.close()
 
 
 
 
-
-
-
-
-
-
-# db = pymysql.connect("localhost","root","password","search")
-# cursor = db.cursor()
-#
-# sql = """CREATE TABLE EMPLOYEE (
-#    FIRST_NAME  CHAR(20) NOT NULL,
-#    LAST_NAME  CHAR(20),
-#    AGE INT,
-#    SEX CHAR(1),
-#    INCOME FLOAT )"""
-#
-# cursor.execute(sql)
-#
-# sql = """INSERT INTO EMPLOYEE(FIRST_NAME,
-#    LAST_NAME, AGE, SEX, INCOME)
-#    VALUES ('Mac', 'Mohan', 20, 'M', 2000)"""
-# try:
-#    # Execute the SQL command
-#    cursor.execute(sql)
-#    # Commit your changes in the database
-#    db.commit()
-# except:
-#    # Rollback in case there is any error
-#    db.rollback()
-#
-# db.close()
+if __name__ == '__main__':
+    m = MYSQLConnector()
+    m.create_pages_table()

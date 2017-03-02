@@ -3,15 +3,36 @@ from bs4 import BeautifulSoup
 import os
 import re
 
+from IndexCreator.MYSQLConnector import MYSQLConnector
 from IndexCreator.Page import Page
 from stemming.porter2 import stem
+
+from IndexCreator.WordObject import WordObject
+
+
+
 
 class Tokenizer:
     def __init__(self):
         self.path_to_resources = 'resources/WEBPAGES_RAW'
         self.stop_words = []
         self.bookkeeping = {}
-        self.pages = [] # todo: populate this
+        self.counter = 0
+        self.all_words = {}  # cumulative across all files, mapping of string word to WordObject
+        self.number_of_pages = 0
+        self.mysql_connector = MYSQLConnector()
+
+    def init(self):
+        self.mysql_connector.create_words_table()
+        self.mysql_connector.create_pages_table()
+
+        self.load_stop_words('stopwords.txt')
+        self.load_bookkeeping('resources/WEBPAGES_RAW/bookkeeping.tsv')
+        self.parse_files()
+
+        for value in t.all_words.values():
+            self.mysql_connector.upload_word(value)
+
 
     # from https://github.com/stanfordnlp/CoreNLP/blob/master/data/edu/stanford/nlp/patterns/surface/stopwords.txt
     def load_stop_words(self, filename):
@@ -31,15 +52,17 @@ class Tokenizer:
         except AttributeError:
             return
 
-        # print(page.id + " -> " + title_text)
+        print(page.id + " -> " + title_text)
 
         page.title_tokens = {}
 
         for key in [stem(x.strip()) for x in title_text.split(' ') if len(x.strip()) > 0 and x.strip() not in self.stop_words]:
-            if key in page.title_tokens:
-                page.title_tokens[key] += 1
+            if key in page.words:
+                page.words[key]['title'].append(self.counter)
+                self.counter += 1
             else:
-                page.title_tokens[key] = 1
+                page.words[key] = {'title': [self.counter], 'header': [], 'body': [], 'tfidf': 0.0}
+                self.counter += 1
 
     def get_header_tokens(self, page, soup):
         header_text = []
@@ -51,10 +74,12 @@ class Tokenizer:
             header_tokens.extend([stem(x.strip()) for x in phrase.split(' ') if len(x.strip()) > 0 and x.strip() not in self.stop_words])
 
         for key in header_tokens:
-            if key in page.header_tokens:
-                page.header_tokens[key] += 1
+            if key in page.words:
+                page.words[key]['header'].append(self.counter)
+                self.counter += 1
             else:
-                page.header_tokens[key] = 1
+                page.words[key] = {'title': [], 'header': [self.counter], 'body': [], 'tfidf': 0.0}
+                self.counter += 1
 
     def get_body_tokens(self, page, soup):
         text = soup.findAll(text=True)
@@ -67,49 +92,50 @@ class Tokenizer:
             body_tokens.extend([stem(x.strip()) for x in phrase.split(' ') if len(x.strip()) > 0 and x.strip() not in self.stop_words])
 
         for key in body_tokens:
-            if key in page.body_tokens:
-                page.body_tokens[key] += 1
+            if key in page.words:
+                page.words[key]['body'].append(self.counter)
+                self.counter += 1
             else:
-                page.body_tokens[key] = 1
-
-        # page.body_tokens = self.remove_header_token_duplicates(page)
+                page.words[key] = {'title': [], 'header': [], 'body': [self.counter], 'tfidf': 0.0}
+                self.counter += 1
 
     def parse_files(self):
         for foldername in os.listdir(self.path_to_resources):
-            if os.path.isdir(self.path_to_resources + "/" + foldername): # should exclude bookkeeping files
+            if os.path.isdir(self.path_to_resources + "/" + foldername):  # should exclude bookkeeping files
                 if foldername == '0':
                     for filename in os.listdir(self.path_to_resources + "/" + foldername):
-                        if filename == '4':
-                            self.parse_tokens(self.path_to_resources + "/" + foldername + "/" + filename, foldername + "/" + filename)
+                        self.parse_tokens(self.path_to_resources + "/" + foldername + "/" + filename, foldername + "/" + filename)
 
-    def parse_tokens(self, filepath, id):
-        p = Page(id)
-        p.url = self.bookkeeping[id]
-        soup = BeautifulSoup(self.read_file_contents(filepath), 'html.parser')
+    def parse_tokens(self, filepath, page_id):
+        p = Page(page_id)
+        p.url = self.bookkeeping[page_id]
+        soup = BeautifulSoup(read_file_contents(filepath), 'html.parser')
         self.get_title_tokens(p, soup)
         self.get_header_tokens(p, soup)
         self.get_body_tokens(p, soup)
-        self.pages.append(p)
 
-    def read_file_contents(self, filepath):
-        with open(filepath, 'r') as fileobject:
-            return re.sub(r'<br\W*>', '\n', str.lower(fileobject.read()))
+        p.word_count = self.counter + 1
 
-    # def remove_header_token_duplicates(self, page):
-    #     temp_dict = page.body_tokens
-    #
-    #     for word in page.header_tokens:
-    #         temp_dict[word] -= 1
-    #
-    #     to_delete = []
-    #     for word in temp_dict:
-    #         if temp_dict[word] == 0:
-    #             to_delete.append(word)
-    #
-    #     for w in to_delete:
-    #         temp_dict.pop(w, None)
-    #
-    #     return temp_dict
+        if len(p.words) > 0:
+            self.append_words(p)
+            self.number_of_pages += 1
+            self.mysql_connector.upload_page(p)
+
+
+    def append_words(self, page):
+        for word, positions in page.words.items():
+            if word not in self.all_words:
+                self.all_words[word] = WordObject(word)
+
+            self.all_words[word].pages.append(page.id)
+
+    # todo: after appending all words, we need to calculate idf for each WordObject
+    # todo: upload words to sql database
+
+
+def read_file_contents(filepath):
+    with open(filepath, 'r') as fileobject:
+        return re.sub(r'<br\W*>', '\n', str.lower(fileobject.read()))
 
 
 def remove_non_alphanumeric_characters(word):
@@ -131,40 +157,8 @@ def visible(element):
 
 if __name__ == '__main__':
     t = Tokenizer()
-    t.load_stop_words('stopwords.txt')
-    t.load_bookkeeping('resources/WEBPAGES_RAW/bookkeeping.tsv')
-    t.parse_files()
+    t.init()
 
-    # t.parse_tokens('test.txt', 'no id')
-    # t.get_files()
-
-    for page in t.pages:
-        for key, value in page.title_tokens.items():
-            print("title: " + key + " -> " + str(value))
-        for key, value in page.header_tokens.items():
-            print("header: " + key + " -> " + str(value))
-        for key, value in page.body_tokens.items():
-            print("body: " + key + " -> " + str(value))
-
-    print('number of pages: ' + str(len(t.pages)))
-
-
-
-
-    # todo: clean unclosed tags using the prettify function (see file 0-1)
-    # todo: rewrite those files to a new resources directory?
-    # todo: what to do about file 0-0 (the one with only numbers?
-    # todo: make another class just to parse text (INCLUDES header tags, list tags, paragraph tags, etc)
     # todo: remove apostrophe s
     # todo: stemming? remove contractions
-
-# todo: page table keys: page id, url, words
-
-# {title: [ {x: 1, y: 2, z: 3} ], headers: [ {x: 1, y: 2, z: 3} ], body: [ {x: 1, y: 2, z: 3} ]}
-
-
-# todo: word table keys: word, idf, page ids (as json)
-# todo: how to make inverted index
-# todo: parse a file
-# todo: if value exists in table
-# todo: update value?
+    # todo: make page table with tfidf
