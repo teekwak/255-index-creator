@@ -1,4 +1,6 @@
 import math
+from ast import literal_eval
+
 import pymysql
 from pymysql import MySQLError
 
@@ -116,6 +118,75 @@ class MYSQLConnector:
 
         db.close()
 
+    def calculate_tfidf(self):
+        db = pymysql.connect(host=self.hostname, user=self.username, passwd=self.password, db=self.database, charset=self.charset)
+        cursor = db.cursor()
+
+        # create counter
+        total_count = 0
+        sql = """
+            SELECT count(*) from Pages
+        """
+        try:
+            cursor.execute(sql)
+            for row in cursor:
+                total_count = row[0]
+        except MySQLError as e:
+            print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+            db.rollback()
+
+        # store all words in memory
+        idf_dict = {}
+        sql = """
+            SELECT Word, idf FROM Words
+        """
+        try:
+            cursor.execute(sql)
+            for row in cursor:
+                idf_dict[row[0]] = row[1]
+        except MySQLError as e:
+            print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+            db.rollback()
+
+        # update each page's words entry
+        current = 0
+        sql = """
+            SELECT * FROM Pages
+        """
+        try:
+            cursor.execute(sql)
+            for row in cursor:
+                all_words = literal_eval(row[3])
+
+                for word, positions in all_words.items():
+                    count = len(positions['title']) + len(positions['header']) + len(positions['body'])
+                    positions['tfidf'] = (count / row[2]) * idf_dict[word]
+
+                values = {
+                    'id': str(row[0]),
+                    'words': str(all_words)
+                }
+
+                cursor2 = db.cursor()
+                sql = """
+                    UPDATE Pages SET WORDS="{words}" WHERE ID="{id}"
+                """.format(**values)
+                try:
+                    cursor2.execute(sql)
+                    db.commit()
+                    current += 1
+                    print("\rFinished " + str(current) + " / " + str(total_count), end='')
+                except MySQLError as e:
+                    print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+                    db.rollback()
+
+        except MySQLError as e:
+            print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+            db.rollback()
+
+        db.close()
+
+
 if __name__ == '__main__':
     m = MYSQLConnector()
-    print("i do nothing")
+    m.calculate_tfidf()
