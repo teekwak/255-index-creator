@@ -1,3 +1,4 @@
+import math
 import pymysql
 from pymysql import MySQLError
 
@@ -17,25 +18,51 @@ class MYSQLConnector:
         sql = """
             CREATE TABLE IF NOT EXISTS Words(
             WORD TEXT,
-            PAGES MEDIUMTEXT
+            PAGES MEDIUMTEXT,
+            IDF FLOAT
             ) CHARACTER SET utf8
         """
 
         cursor.execute(sql)
         db.close()
 
-    def upload_word(self, word_object):
+    def get_page_count(self):
+        db = pymysql.connect(host=self.hostname, user=self.username, passwd=self.password, db=self.database, charset=self.charset)
+        cursor = db.cursor()
+
+        sql = """
+            select count("ID") from PAGES
+        """
+
+        page_count = 0
+
+        try:
+            cursor.execute(sql)
+            results = cursor.fetchall()
+            for row in results:
+                page_count = row[0]
+        except MySQLError as e:
+            print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+            db.rollback()
+
+        if page_count == 0:
+            raise MySQLError('Number of pages in Pages table is 0')
+
+        return page_count
+
+    def upload_word(self, word_object, page_count):
         db = pymysql.connect(host=self.hostname, user=self.username, passwd=self.password, db=self.database, charset=self.charset)
         cursor = db.cursor()
 
         values = {
             'word': str(word_object.word),
-            'pages': str(word_object.pages)
+            'pages': str(word_object.pages),
+            'idf': str(math.log(page_count / len(word_object.pages)))
         }
 
         sql = """
-            INSERT INTO Words (WORD, PAGES)
-            VALUES ("{word}", "{pages}")
+            INSERT INTO Words (WORD, PAGES, IDF)
+            VALUES ("{word}", "{pages}", "{idf}")
         """.format(**values)
 
         try:
@@ -55,7 +82,7 @@ class MYSQLConnector:
 
         sql = """
             CREATE TABLE IF NOT EXISTS Pages(
-            ID VARCHAR(255),
+            ID VARCHAR(255) UNIQUE,
             URL TEXT,
             WORD_COUNT INT,
             WORDS MEDIUMTEXT
@@ -69,7 +96,7 @@ class MYSQLConnector:
         db = pymysql.connect(host=self.hostname, user=self.username, passwd=self.password, db=self.database, charset=self.charset)
         cursor = db.cursor()
 
-        dict = {
+        values = {
             'id': str(page.id),
             'url': str(page.url),
             'word_count': str(page.word_count),
@@ -78,7 +105,7 @@ class MYSQLConnector:
 
         sql = """
             INSERT INTO Pages (ID, URL, WORD_COUNT, WORDS) VALUES ("{id}", "{url}", "{word_count}", "{words}")
-        """.format(**dict)
+        """.format(**values)
 
         try:
             cursor.execute(sql)
@@ -89,9 +116,6 @@ class MYSQLConnector:
 
         db.close()
 
-
-
-
 if __name__ == '__main__':
     m = MYSQLConnector()
-    m.create_pages_table()
+    print("i do nothing")

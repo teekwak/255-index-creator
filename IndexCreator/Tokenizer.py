@@ -10,8 +10,6 @@ from stemming.porter2 import stem
 from IndexCreator.WordObject import WordObject
 
 
-
-
 class Tokenizer:
     def __init__(self):
         self.path_to_resources = 'resources/WEBPAGES_RAW'
@@ -30,9 +28,19 @@ class Tokenizer:
         self.load_bookkeeping('resources/WEBPAGES_RAW/bookkeeping.tsv')
         self.parse_files()
 
-        for value in t.all_words.values():
-            self.mysql_connector.upload_word(value)
+        print("\rUploading words...\n")
 
+        page_count = self.mysql_connector.get_page_count()
+
+        progress = 0
+        for value in t.all_words.values():
+            self.mysql_connector.upload_word(value, page_count)
+            progress += 1
+            print("\r Uploaded " + str(progress) + " / " + str(len(t.all_words)), end='')
+
+        print("\rFinished uploading words!\n")
+
+        # todo: calculate tf-idf score and put into pages table
 
     # from https://github.com/stanfordnlp/CoreNLP/blob/master/data/edu/stanford/nlp/patterns/surface/stopwords.txt
     def load_stop_words(self, filename):
@@ -52,9 +60,9 @@ class Tokenizer:
         except AttributeError:
             return
 
-        print(page.id + " -> " + title_text)
+        print("\r" + page.id + " -> " + title_text, end='')
 
-        page.title_tokens = {}
+        page.words = {}
 
         for key in [stem(x.strip()) for x in title_text.split(' ') if len(x.strip()) > 0 and x.strip() not in self.stop_words]:
             if key in page.words:
@@ -102,8 +110,8 @@ class Tokenizer:
     def parse_files(self):
         for foldername in os.listdir(self.path_to_resources):
             if os.path.isdir(self.path_to_resources + "/" + foldername):  # should exclude bookkeeping files
-                if foldername == '0':
-                    for filename in os.listdir(self.path_to_resources + "/" + foldername):
+                for filename in os.listdir(self.path_to_resources + "/" + foldername):
+                    if not filename.startswith("."):
                         self.parse_tokens(self.path_to_resources + "/" + foldername + "/" + filename, foldername + "/" + filename)
 
     def parse_tokens(self, filepath, page_id):
@@ -120,7 +128,7 @@ class Tokenizer:
             self.append_words(p)
             self.number_of_pages += 1
             self.mysql_connector.upload_page(p)
-
+            self.counter = 0
 
     def append_words(self, page):
         for word, positions in page.words.items():
@@ -129,9 +137,6 @@ class Tokenizer:
 
             self.all_words[word].pages.append(page.id)
 
-    # todo: after appending all words, we need to calculate idf for each WordObject
-    # todo: upload words to sql database
-
 
 def read_file_contents(filepath):
     with open(filepath, 'r') as fileobject:
@@ -139,7 +144,7 @@ def read_file_contents(filepath):
 
 
 def remove_non_alphanumeric_characters(word):
-    return re.sub(r'[^\w]', ' ', word)
+    return re.sub(r'[^\w_]|_', ' ', word)
 
 
 def remove_invisible_text(text):
@@ -158,7 +163,3 @@ def visible(element):
 if __name__ == '__main__':
     t = Tokenizer()
     t.init()
-
-    # todo: remove apostrophe s
-    # todo: stemming? remove contractions
-    # todo: make page table with tfidf
