@@ -20,7 +20,7 @@ class MYSQLConnector:
         sql = """
             CREATE TABLE IF NOT EXISTS Words(
             WORD TEXT,
-            PAGES MEDIUMTEXT,
+            PAGES LONGTEXT,
             IDF FLOAT
             ) CHARACTER SET utf8
         """
@@ -87,7 +87,7 @@ class MYSQLConnector:
             ID VARCHAR(255) UNIQUE,
             URL TEXT,
             WORD_COUNT INT,
-            WORDS MEDIUMTEXT
+            WORDS LONGTEXT
             ) CHARACTER SET utf8
         """
 
@@ -119,6 +119,8 @@ class MYSQLConnector:
         db.close()
 
     def calculate_tfidf(self):
+        print("Calculating TF-IDF")
+
         db = pymysql.connect(host=self.hostname, user=self.username, passwd=self.password, db=self.database, charset=self.charset)
         cursor = db.cursor()
 
@@ -186,7 +188,74 @@ class MYSQLConnector:
 
         db.close()
 
+    def rerank_by_tfidf(self):
+        print("Reranking")
+
+        db = pymysql.connect(host=self.hostname, user=self.username, passwd=self.password, db=self.database, charset=self.charset)
+        word_cursor = db.cursor()
+
+        total_count = 0
+        sql = """
+            SELECT count(*) FROM Words
+        """
+        try:
+            word_cursor.execute(sql)
+            for row in word_cursor:
+                total_count = row[0]
+        except MySQLError as e:
+            print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+            db.rollback()
+
+        current = 0
+        sql = """
+            SELECT * FROM Words
+        """
+
+        try:
+            word_cursor.execute(sql)
+            for word_row in word_cursor:
+                pages = literal_eval(word_row[1])
+
+                if len(pages) > 1:
+                    tuple_list = []
+
+                    # todo: too expensive!
+                    for page in pages:
+                        page_cursor = db.cursor()
+                        page_cursor.execute("SELECT WORDS FROM Pages WHERE ID='{0}'".format(page))
+
+                        for page_row in page_cursor:
+                            page_words = literal_eval(page_row[0])
+                            tuple_list.append((page, page_words[word_row[0]]['tfidf']))
+
+                    tuple_list = sorted(tuple_list, key=lambda x: x[1], reverse=True)
+                    sorted_list = [i[0] for i in tuple_list]
+
+                    values = {
+                        'sorted_list': str(sorted_list),
+                        'word': str(word_row[0])
+                    }
+
+                    update_cursor = db.cursor()
+                    sql = """
+                        UPDATE Words SET PAGES="{sorted_list}" WHERE WORD="{word}"
+                    """.format(**values)
+                    try:
+                        update_cursor.execute(sql)
+                        db.commit()
+                        current += 1
+                        print("\rFinished " + str(current) + " / " + str(total_count), end='')
+                    except MySQLError as e:
+                        print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+                        db.rollback()
+
+        except MySQLError as e:
+            print('Got error {!r}, errno is {}'.format(e, e.args[0]))
+            db.rollback()
+
+        db.close()
+
 
 if __name__ == '__main__':
     m = MYSQLConnector()
-    m.calculate_tfidf()
+    m.rerank_by_tfidf()

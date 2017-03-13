@@ -1,5 +1,5 @@
 .idea/
 .DS_Store
 
-IndexCreator/resources
+IndexCreator/resources*
 __pycache__

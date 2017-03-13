@@ -33,14 +33,12 @@ class Tokenizer:
         page_count = self.mysql_connector.get_page_count()
 
         progress = 0
-        for value in t.all_words.values():
+        for value in self.all_words.values():
             self.mysql_connector.upload_word(value, page_count)
             progress += 1
-            print("\r Uploaded " + str(progress) + " / " + str(len(t.all_words)), end='')
+            print("\r Uploaded " + str(progress) + " / " + str(len(self.all_words)), end='')
 
         print("\rFinished uploading words!\n")
-
-        # todo: calculate tf-idf score and put into pages table
 
     # from https://github.com/stanfordnlp/CoreNLP/blob/master/data/edu/stanford/nlp/patterns/surface/stopwords.txt
     def load_stop_words(self, filename):
@@ -52,7 +50,7 @@ class Tokenizer:
         with open(filename) as file_object:
             for line in file_object:
                 parts = line.split("\t")
-                self.bookkeeping[parts[0]] = parts[1]
+                self.bookkeeping[parts[0]] = parts[1].strip()
 
     def get_title_tokens(self, page, soup):
         try:
@@ -158,8 +156,3 @@ def visible(element):
     elif isinstance(element, bs4.element.Comment):
         return False
     return True
-
-
-if __name__ == '__main__':
-    t = Tokenizer()
-    t.init()
