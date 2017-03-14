@@ -4,25 +4,17 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin  # requires python 3
 from urllib.parse import urlparse
 
-from IndexCreator.PageRank.Page import Page
-
 
 class Tokenizer:
   def __init__(self, counter):
+    self.number_of_files_parsed = 0
     self.total_number_of_files = counter
-    self.bookkeeping = {}  # page -> id
-    self.bookkeeping_urls = set()
+    self.bookkeeping = {}  # id -> page
+    self.reverse_bookkeeping = {} # page -> id
     self.stop_words = []
     self.pageIncomingLinks = {}  # id -> set of ids pointing inwards
-    # todo: list of pages objects?
-    #       each page has the following properties:
-    #         - number of outgoing links
-    #         - a list of incoming link ids that are in our index
-    self.all_pages = []  # list of page objects # todo: do i even need this? yes. you need to keep track of outgoing and incoming for each page
+    self.all_pages = {}  # id -> number of outlinks
     self.all_words = {}  # word to set of pages? (will be accessed constantly, so dictionary is necessary)
-
-    # we just need a SET of the words. we are using the words to find all documents that contain a word from the query
-    # but then we just return the page with the highest page rank, which is independent of word count
 
   # todo: figure out what the end data structure looks like
   # todo: figure out what I need for data structure as the intermediate
@@ -35,7 +27,7 @@ class Tokenizer:
       for line in file_object:
         parts = line.strip().split("\t")
         self.bookkeeping[parts[0]] = parts[1]
-        self.bookkeeping_urls.add(parts[1])
+        self.reverse_bookkeeping[parts[1]] = parts[0]
         self.pageIncomingLinks[parts[1]] = set()
 
 
@@ -49,20 +41,28 @@ class Tokenizer:
 
   # parses all words from a file by getting all the text, removing non-alphanumeric characters, splitting at space, and stripping
   def parse_file(self, filepath, id):
-    page = Page(id)
-    page.url = self.bookkeeping[id]
-
     soup = BeautifulSoup(file_to_string(filepath), 'html.parser')
-    self.parse_anchor_tags(soup, page)
-    self.parse_word_tokens(soup, page)
-    self.all_pages.append(page)
+    self.all_pages[id] = self.parse_anchor_tags(soup, self.bookkeeping[id])
+    self.parse_word_tokens(soup, id)
+    self.number_of_files_parsed += 1
+    # todo print('\rApproximate number of files left to parse: ' + str(self.number_of_files_parsed) + '/' + str(self.total_number_of_files), end='')
 
-    self.total_number_of_files -= 1
-    # print('\rApproximate number of files left to parse: ' + str(self.total_number_of_files), end='')
+
+  # parses all anchor tags and checks if they exist in the pageIncomingLinkCount dictionary
+  def parse_anchor_tags(self, soup, url):
+    outlinks = [urljoin('http://' + url, tag['href']) for tag in soup.findAll('a') if tag.has_attr('href')]
+
+    stripped_outlinks = [urlparse(x).netloc + urlparse(x).path for x in outlinks]
+
+    for link in stripped_outlinks:
+      if link in self.reverse_bookkeeping:
+        self.pageIncomingLinks[url].add(link)
+
+    return len(stripped_outlinks)
 
 
   # parses words from a soup object and appends the set of sorted words to the page object
-  def parse_word_tokens(self, soup, pageObject):
+  def parse_word_tokens(self, soup, id):
     text = soup.findAll(text=True)
 
     # remove invisible text, non-alphanumeric characters, and whitespace
@@ -79,20 +79,7 @@ class Tokenizer:
     for word in visible_text:
       if not word in self.all_words:
         self.all_words[word] = set()
-      self.all_words[word].add(pageObject.id)
-
-
-  # parses all anchor tags and checks if they exist in the pageIncomingLinkCount dictionary
-  def parse_anchor_tags(self, soup, pageObject):
-    outlinks = [urljoin('http://' + pageObject.url, tag['href']) for tag in soup.findAll('a') if tag.has_attr('href')]
-
-    stripped_outlinks = [urlparse(x).netloc + urlparse(x).path for x in outlinks]
-
-    pageObject.number_of_outgoing_links = len(stripped_outlinks)
-
-    for link in stripped_outlinks:
-      if link in self.bookkeeping_urls:
-        self.pageIncomingLinks[pageObject.url].add(link)
+      self.all_words[word].add(id)
 
 
 # returns file as string. replaces <br/> tags with newline character
