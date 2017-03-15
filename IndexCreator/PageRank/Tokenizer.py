@@ -13,7 +13,7 @@ class Tokenizer:
     self.reverse_bookkeeping = {} # page -> id
     self.stop_words = []
     self.pageIncomingLinks = {}  # id -> set of ids pointing inwards
-    self.all_pages = {}  # id -> number of outlinks
+    self.pageToOutgoingLinksCount = {}  # id -> number of outlinks
     self.all_words = {}  # word to set of pages? (will be accessed constantly, so dictionary is necessary)
 
   # todo: figure out what the end data structure looks like
@@ -42,7 +42,7 @@ class Tokenizer:
   # parses all words from a file by getting all the text, removing non-alphanumeric characters, splitting at space, and stripping
   def parse_file(self, filepath, id):
     soup = BeautifulSoup(file_to_string(filepath), 'html.parser')
-    self.all_pages[id] = self.parse_anchor_tags(soup, self.bookkeeping[id])
+    self.pageToOutgoingLinksCount[id] = self.parse_anchor_tags(soup, self.bookkeeping[id])
     self.parse_word_tokens(soup, id)
     self.number_of_files_parsed += 1
     # todo print('\rApproximate number of files left to parse: ' + str(self.number_of_files_parsed) + '/' + str(self.total_number_of_files), end='')

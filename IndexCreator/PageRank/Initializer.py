@@ -1,4 +1,6 @@
 import os
+
+from IndexCreator.PageRank.PageRankIterator import PageRankIterator
 from IndexCreator.PageRank.Tokenizer import Tokenizer
 
 
@@ -23,6 +25,21 @@ for foldername in os.listdir(path_to_resources):
       for filename in os.listdir(path_to_resources + "/" + foldername):
         if not filename.startswith("."):
           pTokenizer.parse_file(path_to_resources + "/" + foldername + "/" + filename, foldername + "/" + filename)
+
+# run page rank
+pIterator = PageRankIterator(Tokenizer)
+pIterator.initialize_page_rank()
+
+# run 10 iterations of page rank
+for i in range(0, 10):
+  pIterator.temp_pages = pIterator.pages
+
+  for id in pIterator.pages:
+    pIterator.temp_pages[id] = pIterator.calculate_page_rank(id)
+
+  pIterator.pages = pIterator.temp_pages
+
+# print page ranks to SOMEWHERE
 
 
 
