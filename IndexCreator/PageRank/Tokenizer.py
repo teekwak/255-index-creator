@@ -3,6 +3,7 @@ import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin  # requires python 3
 from urllib.parse import urlparse
+from stemming.porter2 import stem
 
 
 class Tokenizer:
@@ -28,7 +29,7 @@ class Tokenizer:
         parts = line.strip().split("\t")
         self.bookkeeping[parts[0]] = parts[1]
         self.reverse_bookkeeping[parts[1]] = parts[0]
-        self.pageIncomingLinks[parts[1]] = set()
+        self.pageIncomingLinks[parts[0]] = set()
 
 
   # stopwords from https://github.com/stanfordnlp/CoreNLP/blob/master/data/edu/stanford/nlp/patterns/surface/stopwords.txt
@@ -42,21 +43,21 @@ class Tokenizer:
   # parses all words from a file by getting all the text, removing non-alphanumeric characters, splitting at space, and stripping
   def parse_file(self, filepath, id):
     soup = BeautifulSoup(file_to_string(filepath), 'html.parser')
-    self.pageToOutgoingLinksCount[id] = self.parse_anchor_tags(soup, self.bookkeeping[id])
+    self.pageToOutgoingLinksCount[id] = self.parse_anchor_tags(soup, id, self.bookkeeping[id])
     self.parse_word_tokens(soup, id)
     self.number_of_files_parsed += 1
-    # todo print('\rApproximate number of files left to parse: ' + str(self.number_of_files_parsed) + '/' + str(self.total_number_of_files), end='')
+    print('\rApproximate number of files left to parse: ' + str(self.number_of_files_parsed) + '/' + str(self.total_number_of_files), end='')
 
 
   # parses all anchor tags and checks if they exist in the pageIncomingLinkCount dictionary
-  def parse_anchor_tags(self, soup, url):
+  def parse_anchor_tags(self, soup, id, url):
     outlinks = [urljoin('http://' + url, tag['href']) for tag in soup.findAll('a') if tag.has_attr('href')]
 
     stripped_outlinks = [urlparse(x).netloc + urlparse(x).path for x in outlinks]
 
     for link in stripped_outlinks:
       if link in self.reverse_bookkeeping:
-        self.pageIncomingLinks[url].add(link)
+        self.pageIncomingLinks[id].add(self.reverse_bookkeeping[link])
 
     return len(stripped_outlinks)
 
@@ -73,7 +74,7 @@ class Tokenizer:
         visible_text.extend([x.strip() for x in text_element.split() if len(x.strip()) > 0])
 
     # remove stopwords
-    visible_text = set([x for x in visible_text if x not in self.stop_words])
+    visible_text = set([stem(x) for x in visible_text if x not in self.stop_words])
 
     # add page's id to word dictionary
     for word in visible_text:

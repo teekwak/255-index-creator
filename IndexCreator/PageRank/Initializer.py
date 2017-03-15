@@ -1,4 +1,5 @@
 import os
+import redis
 
 from IndexCreator.PageRank.PageRankIterator import PageRankIterator
 from IndexCreator.PageRank.Tokenizer import Tokenizer
@@ -14,6 +15,7 @@ for foldername in os.listdir(path_to_resources):
         if not filename.startswith("."):
           counter += 1
 
+
 # parse files
 pTokenizer = Tokenizer(counter)
 pTokenizer.load_stop_words('../resources/stopwords.txt')
@@ -21,25 +23,62 @@ pTokenizer.load_bookkeeping('../resources/WEBPAGES_RAW/bookkeeping_queryless.tsv
 
 for foldername in os.listdir(path_to_resources):
   if os.path.isdir(path_to_resources + "/" + foldername):
-    if foldername in ['0', '1']: # todo: remove this line after testing
-      for filename in os.listdir(path_to_resources + "/" + foldername):
-        if not filename.startswith("."):
-          pTokenizer.parse_file(path_to_resources + "/" + foldername + "/" + filename, foldername + "/" + filename)
+    for filename in os.listdir(path_to_resources + "/" + foldername):
+      if not filename.startswith("."):
+        pTokenizer.parse_file(path_to_resources + "/" + foldername + "/" + filename, foldername + "/" + filename)
+
+
+# print words to pages that word occurs on
+with open('words_intermediate.tsv', 'w') as words_output_file:
+  for key, value in pTokenizer.all_words.items():
+    words_output_file.write('\n' + str(key) + '\t' + str(value))
+
 
 # run page rank
-pIterator = PageRankIterator(Tokenizer)
+pIterator = PageRankIterator(pTokenizer)
 pIterator.initialize_page_rank()
 
+
 # run 10 iterations of page rank
-for i in range(0, 10):
+for i in range(1, 51):
   pIterator.temp_pages = pIterator.pages
 
-  for id in pIterator.pages:
+  for id in pIterator.pages.keys():
     pIterator.temp_pages[id] = pIterator.calculate_page_rank(id)
 
   pIterator.pages = pIterator.temp_pages
+  print('\rFinished ' + str(i) + ' iterations of PageRank', end='')
 
-# print page ranks to SOMEWHERE
+
+# print ranks to file
+with open('pageranks_intermediate.tsv', 'w') as output_file:
+  for key, value in pIterator.pages.items():
+    output_file.write('\n' + str(key) + '\t' + str(value))
+
+
+# upload sorted page ranks to redis
+r = redis.StrictRedis(host='localhost', port=6379, db=0)
+redis_counter = 0
+for key, value in pTokenizer.all_words.items():
+  sorted_pages = []
+  for id in value:
+    sorted_pages.append((id, pIterator.pages[id]))
+
+  sorted_pages = sorted(sorted_pages, key=lambda x: x[1], reverse=True)
+  r.rpush(key, *sorted_pages)
+  redis_counter += 1
+  print('\rUploaded ' + str(redis_counter) + ' words to Redis', end='')
+
+
+# upload bookkeeping to redis
+redis_counter = 0
+for key, value in pTokenizer.bookkeeping.items():
+  r.rpush('&_' + key, value)
+  redis_counter += 1
+  print('\rUploaded ' + str(redis_counter) + ' ids to Redis', end='')
+
+print('\n\nProcess completed successfully.')
+
 
 
 

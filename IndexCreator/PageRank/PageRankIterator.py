@@ -13,8 +13,11 @@ class PageRankIterator:
   def calculate_page_rank(self, pageId):
     # calculate sum of all incoming pages's page ranks
     sumOfIncomingPageRanks = 0
-    for id in self.tokenizer.pageIncomingLinks:
-      sumOfIncomingPageRanks += (self.pages[id] / self.tokenizer.pageToOutgoingLinksCount[id])
+
+    for id in self.tokenizer.pageIncomingLinks[pageId]:
+      if id in self.tokenizer.pageToOutgoingLinksCount: # todo: just for test purposes. links will not all exist during testing
+        if self.tokenizer.pageToOutgoingLinksCount[id] != 0:
+          sumOfIncomingPageRanks += (self.pages[id] / self.tokenizer.pageToOutgoingLinksCount[id])
 
     # return page rank formula: PR(A) = (1 - d) / N + d * sum(PR(i)/len(outgoing(i))) for each incoming i
     return ((1 - self.DAMPENING_FACTOR) / self.tokenizer.number_of_files_parsed) + (self.DAMPENING_FACTOR * sumOfIncomingPageRanks)
