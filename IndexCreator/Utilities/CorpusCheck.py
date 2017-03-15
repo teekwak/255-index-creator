@@ -29,12 +29,8 @@ class CorpusChecker:
                 print(x)
 
     def search_for_words(self, words):
-        path_to_resources = 'resources/WEBPAGES_RAW'
+        path_to_resources = '../resources/WEBPAGES_RAW'
         word_exp = '|'.join(words)
-
-        s = "this is a machine learning algorithm for informationsecurity"
-
-        print('x -> ' + str(re.findall(word_exp, s)))
 
         for foldername in os.listdir(path_to_resources):
             if os.path.isdir(path_to_resources + "/" + foldername):  # should exclude bookkeeping files
@@ -47,7 +43,34 @@ class CorpusChecker:
                                 print(foldername + "/" + filename + " -> " + str(found_words))
 
 
+    def search_for_url(self, urls):
+      path_to_resources = '../resources/WEBPAGES_RAW'
+
+      bookkeeping = set()
+      with open(path_to_resources + "/bookkeeping.tsv") as bookkeeping_file:
+        for line in bookkeeping_file:
+          parsed = line.strip().split("\t")
+          bookkeeping.add(parsed[1])
+
+      with open(path_to_resources + '/bookkeeping_queryless.tsv') as queryless_bookkeeping_file:
+        for line in queryless_bookkeeping_file:
+          parsed = line.strip().split("\t")
+          bookkeeping.add(parsed[1])
+
+      for url in urls:
+        isFound = url in bookkeeping
+        print(str(url) + " -> " + str(isFound))
+
+
 if __name__ == '__main__':
     c = CorpusChecker()
     # c.check_content_type("resources/WEBPAGES_RAW/bookkeeping.tsv")
     # c.search_for_words(['machine', 'learning', 'information', 'retrieval', 'security', 'software', 'engineering', 'graduate', 'courses']);
+    # c.search_for_words(["https://grape/svn/group/codebase/appstring/tags/release-1.0/"])
+    c.search_for_url([
+      'www.ics.uci.edu/~lopes/teaching/cs221W15/',
+      'www.ics.uci.edu/~djp3/classes/2009_01_02_INF141/calendar.html',
+      'www.ics.uci.edu/~lopes/teaching/cs221W13/',
+      'www.ics.uci.edu/~djp3/classes/2014_01_INF141/calendar.html',
+      'www.ics.uci.edu/~djp3/classes/2010_01_CS221/'
+    ])
