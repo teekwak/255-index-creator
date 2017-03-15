@@ -70,12 +70,14 @@ for key, value in pTokenizer.all_words.items():
   print('\rUploaded ' + str(redis_counter) + ' words to Redis', end='')
 
 
-# upload bookkeeping to redis
+# upload actual bookkeeping to redis
 redis_counter = 0
-for key, value in pTokenizer.bookkeeping.items():
-  r.rpush('&_' + key, value)
-  redis_counter += 1
-  print('\rUploaded ' + str(redis_counter) + ' ids to Redis', end='')
+with open('../resources/WEBPAGES_RAW/bookkeeping.tsv') as actual_bookkeeping_file:
+  for line in actual_bookkeeping_file:
+    parts = line.strip().split("\t")
+    r.set('&_' + parts[0], parts[1])
+    redis_counter += 1
+    print('\rUploaded ' + str(redis_counter) + ' ids to Redis', end='')
 
 print('\n\nProcess completed successfully.')
 

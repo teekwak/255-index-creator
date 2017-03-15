@@ -55,9 +55,15 @@ class Tokenizer:
 
     stripped_outlinks = [urlparse(x).netloc + urlparse(x).path for x in outlinks]
 
-    for link in stripped_outlinks:
-      if link in self.reverse_bookkeeping:
-        self.pageIncomingLinks[id].add(self.reverse_bookkeeping[link])
+    # if there are no outgoing links, then it 'points' to every other page
+    if len(outlinks) == 0:
+      for other_id in self.bookkeeping:
+        if other_id != id:
+          self.pageIncomingLinks[other_id].add(id)
+    else:
+      for link in stripped_outlinks:
+        if link in self.reverse_bookkeeping:
+          self.pageIncomingLinks[id].add(self.reverse_bookkeeping[link])
 
     return len(stripped_outlinks)
 

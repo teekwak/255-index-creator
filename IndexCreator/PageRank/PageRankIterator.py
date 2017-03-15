@@ -4,10 +4,10 @@ class PageRankIterator:
     self.DAMPENING_FACTOR = 0.85  # from literature
     self.pages = {}
 
-  # set page rank of all pages to 1
+  # set page rank of all pages to 1 / N
   def initialize_page_rank(self):
     for id in self.tokenizer.bookkeeping.keys():
-      self.pages[id] = 1
+      self.pages[id] = 1 / self.tokenizer.number_of_files_parsed
 
   # calculate page rank
   def calculate_page_rank(self, pageId):
