@@ -13,12 +13,11 @@ class Tokenizer:
     self.bookkeeping = {}  # id -> page
     self.reverse_bookkeeping = {} # page -> id
     self.stop_words = []
+    self.pagesWithoutOutgoingLinks = set()
     self.pageIncomingLinks = {}  # id -> set of ids pointing inwards
     self.pageToOutgoingLinksCount = {}  # id -> number of outlinks
-    self.all_words = {}  # word to set of pages? (will be accessed constantly, so dictionary is necessary)
-
-  # todo: figure out what the end data structure looks like
-  # todo: figure out what I need for data structure as the intermediate
+    self.all_words = {}  # word to set of page ids? (will be accessed constantly, so dictionary is necessary)
+    self.page_word_frequencies = {} # id -> dictionary of word to count of how many times it occurs
 
 
   # puts bookkeeping.tsv to dictionary of id -> URL
@@ -30,6 +29,7 @@ class Tokenizer:
         self.bookkeeping[parts[0]] = parts[1]
         self.reverse_bookkeeping[parts[1]] = parts[0]
         self.pageIncomingLinks[parts[0]] = set()
+        self.page_word_frequencies[parts[0]] = {}
 
 
   # stopwords from https://github.com/stanfordnlp/CoreNLP/blob/master/data/edu/stanford/nlp/patterns/surface/stopwords.txt
@@ -57,9 +57,7 @@ class Tokenizer:
 
     # if there are no outgoing links, then it 'points' to every other page
     if len(outlinks) == 0:
-      for other_id in self.bookkeeping:
-        if other_id != id:
-          self.pageIncomingLinks[other_id].add(id)
+      self.pagesWithoutOutgoingLinks.add(id)
     else:
       for link in stripped_outlinks:
         if link in self.reverse_bookkeeping:
@@ -72,18 +70,21 @@ class Tokenizer:
   def parse_word_tokens(self, soup, id):
     text = soup.findAll(text=True)
 
-    # remove invisible text, non-alphanumeric characters, and whitespace
+    # remove invisible text, non-alphanumeric characters, whitespace, and stopwords
     visible_text = []
     for text_element in remove_invisible_text(text):
       if len(text_element.strip()) > 0:
         text_element = remove_non_alphanumeric_characters(text_element)
-        visible_text.extend([x.strip() for x in text_element.split() if len(x.strip()) > 0])
+        visible_text.extend([stem(x.strip()) for x in text_element.split() if len(x.strip()) > 0 and x.strip() not in self.stop_words])
 
-    # remove stopwords
-    visible_text = set([stem(x) for x in visible_text if x not in self.stop_words])
+    # get occurrence counts of words on the page
+    for word in visible_text:
+      if not word in self.page_word_frequencies[id]:
+        self.page_word_frequencies[id][word] = 0
+      self.page_word_frequencies[id][word] += 1
 
     # add page's id to word dictionary
-    for word in visible_text:
+    for word in set(visible_text):
       if not word in self.all_words:
         self.all_words[word] = set()
       self.all_words[word].add(id)
